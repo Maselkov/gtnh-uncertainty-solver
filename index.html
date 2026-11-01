@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Uncertainty Resolver Solver</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
@@ -39,9 +40,22 @@ h2 { font: 700 20px/1.2 var(--f-display); margin: 0 }
 .lede { color: var(--muted); max-width: 64ch; margin: 8px 0 0 }
 .eyebrow { font: 700 12px var(--f-data); letter-spacing: .12em; text-transform: uppercase; color: var(--accent) }
 
-.workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px }
-@media (max-width: 760px) { .workspace { grid-template-columns: minmax(0, 1fr) } }
+/* before a screenshot: drop zone | matrix, steps below. After: slim bar on top, steps | matrix */
+.workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px;
+  grid-template-areas: "shot screen" "steps steps" }
+.workspace.loaded { grid-template-areas: "shot shot" "steps screen" }
+@media (max-width: 760px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); grid-template-areas: "shot" "screen" "steps" }
+  .workspace.loaded { grid-template-areas: "shot" "steps" "screen" }
+}
+.shot { grid-area: shot } .screencard { grid-area: screen } .stepsec { grid-area: steps; display: grid; gap: 14px; align-content: start; min-width: 0 }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; display: grid; gap: 14px; align-content: start; min-width: 0 }
+
+.loaded .shot { padding: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px }
+.loaded .shot h2 { display: none }
+.loaded .drop { display: flex; flex: 1 1 280px; padding: 6px 10px; gap: 12px; border-width: 1px; border-style: solid; text-align: left; justify-content: flex-start }
+.loaded .drop canvas { max-height: 64px; width: auto }
+.loaded .msg { flex: 1 1 260px }
 
 .drop { border: 2px dashed var(--line); border-radius: 6px; padding: 14px; text-align: center; cursor: pointer; display: grid; gap: 10px; place-items: center; transition: border-color .15s }
 .drop:hover, .drop.over, .drop:focus-visible { border-color: var(--accent); outline: none }
@@ -75,7 +89,7 @@ h2 { font: 700 20px/1.2 var(--f-display); margin: 0 }
 .answer .big { font: 700 26px/1.15 var(--f-display) }
 .answer p { margin: 0; color: var(--muted); font-size: 14px }
 
-.steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px }
+.steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px }
 .step { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: grid; gap: 10px; min-width: 0 }
 .step h3 { margin: 0; font: 700 15px var(--f-display); display: flex; justify-content: space-between; gap: 8px }
 .step h3 span { font: 500 13px var(--f-data); color: var(--muted) }
@@ -103,8 +117,8 @@ button.link:focus-visible { outline: 2px solid var(--accent) }
     <p class="lede">Drop a screenshot of the Uncertainty Resolver window. The page reads every cell from its brightness, works out which LEDs are active, and tells you which swap buttons to press, in order, to turn every LED green.</p>
   </header>
 
-  <section class="workspace">
-    <div class="card">
+  <section class="workspace" id="workspace">
+    <div class="card shot">
       <h2>Screenshot</h2>
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a screenshot">
         <canvas id="preview" width="0" height="0" hidden></canvas>
@@ -114,7 +128,7 @@ button.link:focus-visible { outline: 2px solid var(--accent) }
       <div class="msg" id="msg">Showing an example board. Upload your own screenshot to replace it.</div>
     </div>
 
-    <div class="card">
+    <div class="card screencard">
       <div class="screen">
         <div class="row">
           <div class="status">Status: <span id="status"></span></div>
@@ -131,13 +145,13 @@ button.link:focus-visible { outline: 2px solid var(--accent) }
         <div class="matrix" id="matrix"><div class="leds" id="leds"></div></div>
         <p class="legend">Values as shown by the eye button (0–100). Click a cell to correct a misread.</p>
       </div>
-      <div class="answer" id="answer"></div>
     </div>
-  </section>
 
-  <section style="display:grid;gap:14px">
-    <h2 id="stepsTitle">Button presses</h2>
-    <ol class="steps" id="steps"></ol>
+    <div class="stepsec">
+      <div class="answer" id="answer"></div>
+      <h2 id="stepsTitle">Button presses</h2>
+      <ol class="steps" id="steps"></ol>
+    </div>
   </section>
 
   <section class="how card">
@@ -155,7 +169,7 @@ button.link:focus-visible { outline: 2px solid var(--accent) }
     </div>
     <div>
       <h2>Screenshot tips</h2>
-      <p>After opening the GUI, wait until the LEDs appear before taking the screenshot; they can take a few seconds. Use PNG (F2 in Minecraft) and any GUI scale. The value-assist numbers can be on or off; cells are read from their blue level. All cells slowly fade together over time, which does not affect balance.</p>
+      <p>After opening the GUI, wait until the LEDs appear before taking the screenshot; they can take a few seconds, and until then the cells may show placeholder values. Use PNG (F2 in Minecraft) and any GUI scale. The value-assist numbers can be on or off; cells are read from their blue level. All cells slowly fade together over time, which does not affect balance.</p>
     </div>
   </section>
 </main>
@@ -266,7 +280,7 @@ function analyzeImage(data, W, H) {
   if (!best || best.score < 0.6) return { error: 'Could not find the Schrödinger matrix in this image. Make sure the whole resolver GUI is visible and the screenshot is not heavily compressed.' };
 
   const { x0, y0, s, t } = best;
-  const values = [], confidence = [];
+  const values = [], confidence = [], fullBright = [];
   for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
     const gx0 = 1 + 12 * i, gy0 = 1 + 12 * j;
     const xs = Math.ceil(x0 + (gx0 + 0.4) * s), xe = Math.floor(x0 + (gx0 + 7.6) * s);
@@ -282,6 +296,7 @@ function analyzeImage(data, W, H) {
     const med = bs.length ? bs[bs.length >> 1] : 0;
     values.push(Math.max(0, Math.min(999, Math.round((med + 0.5) / 255 * 1000))));
     confidence.push(total ? bs.length / total : 0);
+    fullBright.push(med >= 254);
   }
   // LEDs
   const leds = [];
@@ -291,15 +306,36 @@ function analyzeImage(data, W, H) {
     for (let y = Math.ceil(y0 + gy * t); y < Math.floor(y0 + (gy + 4) * t); y++)
       for (let x = Math.ceil(x0 + gx * s); x < Math.floor(x0 + (gx + 4) * s); x++) {
         const [r, g, b] = px(x, y); tot++;
-        if (g > 150 && r < 80 && b < 90) green++;
-        else if (r > 180 && g < 110 && b < 60) red++;
+        // LED sprites mix a solid and a light shade (corner LEDs are only a quarter solid), so count both
+        if (g > r + 50 && g > b + 20) green++;
+        else if (r > g + 60 && r > b + 60) red++;
       }
-    leds.push(green > tot * 0.2 ? 'green' : red > tot * 0.2 ? 'red' : 'off');
+    leds.push(green > tot * 0.3 ? 'green' : red > tot * 0.3 ? 'red' : 'off');
   }
   let mode = 0;
   const lit = leds.map((l, k) => (l !== 'off' ? k : -1)).filter(k => k >= 0).sort().join(',');
   for (const m of [1, 2, 3, 4, 5]) if ([...MODE_LEDS[m]].sort().join(',') === lit) mode = m;
-  return { values, confidence, leds, mode, box: { x: x0, y: y0, w: best.w, h: best.h } };
+
+  // A cell at 0-3 has alpha 0, which the game draws fully opaque: it looks identical to 999.
+  // Pick 0 or 999 for each full-bright cell so the computed LEDs match the ones in the screenshot.
+  const amb = fullBright.map((f, i) => (f ? i : -1)).filter(i => i >= 0);
+  const ambiguous = new Array(16).fill(false);
+  if (amb.length) {
+    const fits = [];
+    for (let mask = 0; mask < 1 << Math.min(amb.length, 10); mask++) {
+      const v = values.slice();
+      amb.forEach((i, k) => { v[i] = mask & (1 << k) ? 999 : 0; });
+      const ok = !mode || evaluate(v, buildConstraints(mode)).every(e => (leds[e.led] === 'green') === e.ok);
+      if (ok) fits.push(v);
+    }
+    // prefer 0 (fading cells end there; 998-999 is rare), and flag cells the LEDs could not settle
+    const pick = fits.length ? fits[0] : values.map((x, i) => (fullBright[i] ? 0 : x));
+    for (const i of amb) {
+      values[i] = pick[i];
+      ambiguous[i] = fits.length !== 1 && new Set(fits.map(v => v[i])).size !== 1;
+    }
+  }
+  return { values, confidence, fullBright, ambiguous, leds, mode, box: { x: x0, y: y0, w: best.w, h: best.h } };
 }
 
 // ---------- solver ----------
@@ -397,7 +433,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = { analyzeI
 const SAMPLE = [680, 190, 750, 520, 190, 470, 320, 480, 800, 230, 780, 470, 560, 640, 210, 800];
 const LED_XY = [11 / 46, 0.5, 35 / 46]; // LED centres as fraction of matrix
 const $ = (id) => document.getElementById(id);
-let values = SAMPLE.slice(), mode = 5, lowConf = new Array(16).fill(false);
+let values = SAMPLE.slice(), mode = 5, lowConf = new Array(16).fill(false), modeUnknown = false;
 
 // build matrix inputs
 const inputs = [];
@@ -412,7 +448,7 @@ for (let i = 0; i < 16; i++) {
   $('matrix').insertBefore(inp, $('leds'));
   inputs.push(inp);
 }
-$('mode').addEventListener('change', () => { mode = Number($('mode').value); render(true); });
+$('mode').addEventListener('change', () => { mode = Number($('mode').value); modeUnknown = false; render(true); });
 
 function cellName(i) { return `row ${(i >> 2) + 1}, col ${(i & 3) + 1}`; }
 
@@ -428,6 +464,14 @@ function render(syncInputs = true) {
   $('status').innerHTML = solved ? '<span class="ok">OK</span>' : '<span class="ng">NG</span>';
   $('leds').innerHTML = ev.map(e => `<div class="led ${e.ok ? 'ok' : 'ng'}" style="left:${LED_XY[e.led % 3] * 100}%;top:${LED_XY[(e.led / 3) | 0] * 100}%"></div>`).join('');
 
+  if (modeUnknown) {
+    $('status').innerHTML = '<span class="ng">?</span>';
+    $('leds').innerHTML = '';
+    $('answer').innerHTML = `<div class="big">Waiting for the LEDs</div><p>The GUI had not finished loading from the server when this was taken, so the cells may still show placeholder values. Wait until the LEDs appear in game, then take a new screenshot. If you are sure the values are right, pick the LED layout to solve anyway.</p>`;
+    $('stepsTitle').textContent = 'Button presses';
+    $('steps').innerHTML = '';
+    return;
+  }
   const sol = solve(values, mode);
   const ans = $('answer'), list = $('steps');
   list.innerHTML = '';
@@ -479,15 +523,24 @@ function loadImage(file) {
     URL.revokeObjectURL(url);
     const data = ctx.getImageData(0, 0, cv.width, cv.height).data;
     const r = analyzeImage(data, cv.width, cv.height);
-    cv.hidden = false; $('dropText').innerHTML = '<strong>Click, drop or paste</strong> to try another screenshot';
-    if (r.error) { setMsg(r.error + ' You can also type the values into the grid.', true); return; }
+    cv.hidden = false;
+    if (r.error) {
+      $('workspace').classList.remove('loaded');
+      $('dropText').innerHTML = '<strong>Click, drop or paste</strong> to try another screenshot';
+      setMsg(r.error + ' You can also type the values into the grid.', true); return;
+    }
+    $('workspace').classList.add('loaded');
+    $('dropText').innerHTML = '<strong>Screenshot read ✓</strong><br>Click, drop or paste to replace';
     ctx.lineWidth = Math.max(2, r.box.w / 60); ctx.strokeStyle = '#f2c230';
     ctx.strokeRect(r.box.x - ctx.lineWidth, r.box.y - ctx.lineWidth, r.box.w + 2 * ctx.lineWidth, r.box.h + 2 * ctx.lineWidth);
-    values = r.values; lowConf = r.confidence.map(c => c < 0.15);
+    values = r.values; lowConf = r.confidence.map((c, i) => c < 0.15 || r.ambiguous[i]);
     const notes = [];
-    if (r.mode) mode = r.mode; else notes.push('Could not tell which LEDs are active. The LEDs can take a few seconds to appear after the GUI opens, so wait until they show up in game and take a new screenshot, or pick the LED layout by hand.');
+    modeUnknown = !r.mode;
+    if (r.mode) mode = r.mode; else notes.push('No LEDs in this screenshot, so the GUI was still loading. The LEDs can take a few seconds to appear after the GUI opens.');
+    const zeroed = r.fullBright.map((f, i) => (f && values[i] === 0 ? cellName(i) : null)).filter(Boolean);
+    if (zeroed.length) notes.push(`Read ${zeroed.join(' and ')} as 0 to match the LEDs: at full brightness the cell does not show the value the game is using.`);
     if (lowConf.some(Boolean)) notes.push('Cells with a dashed outline were hard to read; check them against the game.');
-    setMsg(notes.length ? notes.join(' ') : 'Read all 16 cells and the LED layout. Check the numbers match the game, then follow the steps.', notes.length > 0);
+    setMsg(notes.length ? notes.join(' ') : 'Read all 16 cells and the LED layout. Check the numbers match the game, then follow the steps.', lowConf.some(Boolean) || !r.mode);
     render(true);
   };
   img.onerror = () => setMsg('Could not open that image.', true);

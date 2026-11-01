@@ -1,0 +1,509 @@
+<meta charset="utf-8">
+<title>Uncertainty Resolver Solver</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one column; a TecTech-style navy "screen" panel holds input and answer, steps beneath */
+:root {
+  --bg: #e9ebf3;
+  --panel: #f7f8fc;
+  --fg: #171a2b;
+  --muted: #5b6080;
+  --line: #c9cde0;
+  --screen: #000020;
+  --screen-fg: #e8ecff;
+  --frame: #d2dcff;
+  --cell: #0073ff;
+  --accent: #2f54d8;
+  --ok: #10a845;
+  --bad: #d8452a;
+  --hl1: #f2c230;
+  --hl2: #3bd6ff;
+  --f-display: "Pixelify Sans", "Courier New", monospace;
+  --f-body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --f-data: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0b0d1a; --panel: #141729; --fg: #e4e7f5; --muted: #9aa0c4; --line: #2a2f4d;
+  --accent: #7d97ff; --ok: #2fd46a; --bad: #ff6a4d; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0b0d1a; --panel: #141729; --fg: #e4e7f5; --muted: #9aa0c4; --line: #2a2f4d;
+  --accent: #7d97ff; --ok: #2fd46a; --bad: #ff6a4d; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px }
+main { max-width: 980px; margin: 0 auto; display: grid; gap: 28px }
+h1 { font: 700 clamp(28px, 5vw, 40px)/1.1 var(--f-display); margin: 0; text-wrap: balance; letter-spacing: .01em }
+h2 { font: 700 20px/1.2 var(--f-display); margin: 0 }
+.lede { color: var(--muted); max-width: 64ch; margin: 8px 0 0 }
+.eyebrow { font: 700 12px var(--f-data); letter-spacing: .12em; text-transform: uppercase; color: var(--accent) }
+
+.workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px }
+@media (max-width: 760px) { .workspace { grid-template-columns: minmax(0, 1fr) } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; display: grid; gap: 14px; align-content: start; min-width: 0 }
+
+.drop { border: 2px dashed var(--line); border-radius: 6px; padding: 14px; text-align: center; cursor: pointer; display: grid; gap: 10px; place-items: center; transition: border-color .15s }
+.drop:hover, .drop.over, .drop:focus-visible { border-color: var(--accent); outline: none }
+.drop canvas { max-width: 100%; height: auto; image-rendering: pixelated; border-radius: 3px; display: block }
+.drop p { margin: 0; color: var(--muted); font-size: 14px }
+.drop strong { color: var(--fg) }
+.msg { font-size: 14px; padding: 8px 10px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 12%, transparent) }
+.msg.err { background: color-mix(in srgb, var(--bad) 16%, transparent) }
+
+/* the navy screen, mirroring the in-game monitor */
+.screen { background: var(--screen); color: var(--screen-fg); border-radius: 4px; padding: 14px; display: grid; gap: 12px; border: 3px solid #3a3f63 }
+.screen .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap }
+.status { font: 700 20px var(--f-display) }
+.status .ok { color: #39e27a } .status .ng { color: #ff7a5c }
+.screen label { font: 12px var(--f-data); color: #a9b2e6; display: flex; gap: 6px; align-items: center }
+.screen select { font: 13px var(--f-data); background: #0d1240; color: var(--screen-fg); border: 1px solid #3a4280; border-radius: 3px; padding: 3px 6px }
+
+.matrix { position: relative; width: min(100%, 300px); aspect-ratio: 1; margin: 0 auto; background: var(--frame); padding: 2.2%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8.7%; border-radius: 2px }
+.matrix input { width: 100%; height: 100%; min-width: 0; border: 0; text-align: center; font: 700 clamp(14px, 4.4vw, 20px) var(--f-data); color: #fff; text-shadow: 1px 1px 0 #3f3f3f;
+  background: rgb(0 calc(115 * var(--a)) calc(255 * var(--a))); border-radius: 1px; -moz-appearance: textfield; padding: 0 }
+.matrix input::-webkit-inner-spin-button { -webkit-appearance: none }
+.matrix input:focus-visible { outline: 2px solid var(--hl1); outline-offset: 1px }
+.matrix input.low { outline: 2px dashed var(--hl1); outline-offset: -2px }
+.leds { position: absolute; inset: 0; pointer-events: none }
+.led { position: absolute; width: 8.7%; height: 8.7%; transform: translate(-50%, -50%); border-radius: 1px }
+.led.ok { background: #00de25 } .led.ng { background: #e63900 }
+.legend { font: 12px var(--f-data); color: #a9b2e6; margin: 0 }
+
+/* answer */
+.answer { display: grid; gap: 4px }
+.answer .big { font: 700 26px/1.15 var(--f-display) }
+.answer p { margin: 0; color: var(--muted); font-size: 14px }
+
+.steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: grid; gap: 10px; min-width: 0 }
+.step h3 { margin: 0; font: 700 15px var(--f-display); display: flex; justify-content: space-between; gap: 8px }
+.step h3 span { font: 500 13px var(--f-data); color: var(--muted) }
+.gui { display: grid; grid-template-columns: repeat(2, 1fr) 1.6fr repeat(2, 1fr); gap: 4px }
+.gui .mid { grid-row: span 4; background: var(--screen); border-radius: 2px }
+.btn { aspect-ratio: 1; border-radius: 2px; background: color-mix(in srgb, var(--muted) 22%, var(--panel)); border: 1px solid var(--line); display: grid; place-items: center; font: 700 13px var(--f-data); color: #171a2b }
+.btn.first { background: var(--hl1); border-color: var(--hl1) }
+.btn.second { background: var(--hl2); border-color: var(--hl2) }
+.step p { margin: 0; font-size: 14px }
+.step code { font: 500 13px var(--f-data) }
+
+.how { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px }
+.how p, .how li { color: var(--muted); font-size: 15px; max-width: 62ch }
+.how ul { padding-left: 18px; margin: 6px 0 0 }
+.how h2 { font-size: 17px }
+button.link { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline }
+button.link:focus-visible { outline: 2px solid var(--accent) }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">GT New Horizons · TecTech Quantum Computer</div>
+    <h1>Uncertainty Resolver Solver</h1>
+    <p class="lede">Drop a screenshot of the Uncertainty Resolver window. The page reads every cell from its brightness, works out which LEDs are active, and tells you which swap buttons to press, in order, to turn every LED green.</p>
+  </header>
+
+  <section class="workspace">
+    <div class="card">
+      <h2>Screenshot</h2>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a screenshot">
+        <canvas id="preview" width="0" height="0" hidden></canvas>
+        <p id="dropText"><strong>Click, drop or paste (Ctrl+V)</strong> a screenshot of the resolver GUI</p>
+        <input type="file" id="file" accept="image/*" hidden>
+      </div>
+      <div class="msg" id="msg">Showing an example board. Upload your own screenshot to replace it.</div>
+    </div>
+
+    <div class="card">
+      <div class="screen">
+        <div class="row">
+          <div class="status">Status: <span id="status"></span></div>
+          <label for="mode">LED layout
+            <select id="mode">
+              <option value="1">Centre only</option>
+              <option value="2">Top + bottom</option>
+              <option value="3">Four edges</option>
+              <option value="4">Four corners</option>
+              <option value="5">Corners + centre</option>
+            </select>
+          </label>
+        </div>
+        <div class="matrix" id="matrix"><div class="leds" id="leds"></div></div>
+        <p class="legend">Values as shown by the eye button (0–100). Click a cell to correct a misread.</p>
+      </div>
+      <div class="answer" id="answer"></div>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:14px">
+    <h2 id="stepsTitle">Button presses</h2>
+    <ol class="steps" id="steps"></ol>
+  </section>
+
+  <section class="how card">
+    <div>
+      <h2>Before you press anything</h2>
+      <ul>
+        <li>If a cell has a yellow box around it, one button is already selected. Click that same button once to clear it.</li>
+        <li>Each step is two clicks: the yellow button, then the blue one. The two cells swap.</li>
+        <li>The button grid matches the matrix: the left two columns are matrix columns 1–2, the right two are columns 3–4.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>How it is checked</h2>
+      <p>Each active LED weighs a group of cells. Cells mirrored through the LED form pairs, and the LED is green when the summed pair differences stay below 128 × the group size (out of 0–999 per cell). The solver searches every 1-, 2- and 3-swap sequence for the one with the most headroom, and plans with a safety margin of 2 points per pair to absorb rounding in the screenshot.</p>
+    </div>
+    <div>
+      <h2>Screenshot tips</h2>
+      <p>After opening the GUI, wait until the LEDs appear before taking the screenshot; they can take a few seconds. Use PNG (F2 in Minecraft) and any GUI scale. The value-assist numbers can be on or off; cells are read from their blue level. All cells slowly fade together over time, which does not affect balance.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+// Uncertainty Resolver: screenshot reader + solver.
+// Rules mirror tectech MTEHatchUncertainty.compute()/balanceCheck().
+
+// monitor.png (46x46): 'a' = frame (white), 'c' = cell interior (black), '.' = transparent/LED area
+const MONITOR_ROWS = (() => {
+  // reconstruct ring/cell layout: cells are 8x8 interiors at 1+12k
+  const rows = [];
+  for (let y = 0; y < 46; y++) {
+    let r = '';
+    for (let x = 0; x < 46; x++) {
+      const inCell = (v) => { const m = (v - 1) % 12; return v >= 1 && v < 45 && m >= 0 && m < 8; };
+      const ring = x === 0 || y === 0 || x === 45 || y === 45;
+      if (inCell(x) && inCell(y)) r += 'c';
+      else if (ring && !((x % 12 === 10 || x % 12 === 11) && x < 36) && !((y % 12 === 10 || y % 12 === 11) && y < 36)) r += 'a';
+      else r += '.';
+    }
+    rows.push(r);
+  }
+  return rows;
+})();
+
+// LED layout: 3x3 grid of 4x4 squares at gui offsets 9, 21, 33
+const LED_POS = [9, 21, 33];
+
+// For each mode: list of balance groups (exact index order from compute()).
+const MODES = {
+  1: [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]],
+  2: [[0, 4, 1, 5, 2, 6, 3, 7], [8, 12, 9, 13, 10, 14, 11, 15]],
+  3: [[0, 4, 8, 12, 1, 5, 9, 13], [0, 4, 1, 5, 2, 6, 3, 7], [8, 12, 9, 13, 10, 14, 11, 15], [2, 6, 10, 14, 3, 7, 11, 15]],
+  4: [[0, 4, 1, 5], [8, 12, 9, 13], [2, 6, 3, 7], [10, 14, 11, 15]],
+  5: [[0, 4, 1, 5], [8, 12, 9, 13], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [2, 6, 3, 7], [10, 14, 11, 15]],
+};
+// Which LED (3x3 index) each group lights, same order as MODES
+const MODE_LEDS = { 1: [4], 2: [1, 7], 3: [3, 1, 7, 5], 4: [0, 6, 2, 8], 5: [0, 6, 4, 2, 8] };
+
+function buildConstraints(mode) {
+  return MODES[mode].map((g, k) => {
+    const pairs = [];
+    for (let i = 0; i < g.length >> 1; i++) pairs.push([g[i], g[g.length - i - 1]]);
+    return { pairs, limit: g.length << 7, led: MODE_LEDS[mode][k] };
+  });
+}
+
+function evaluate(vals, cons) {
+  return cons.map(c => {
+    let s = 0;
+    for (const [a, b] of c.pairs) s += Math.abs(vals[a] - vals[b]);
+    return { sum: s, limit: c.limit, ok: s < c.limit, led: c.led, pairs: c.pairs };
+  });
+}
+
+// ---------- screenshot reading ----------
+
+function analyzeImage(data, W, H) {
+  const px = (x, y) => { const i = (y * W + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+  const bright = new Uint8Array(W * H);
+  for (let i = 0, p = 0; p < W * H; p++, i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    if (Math.min(r, g, b) > 140 && b >= r) bright[p] = 1;
+  }
+  // connected components (4-neighbour)
+  const label = new Int32Array(W * H);
+  const stack = new Int32Array(W * H);
+  const comps = [];
+  let n = 0;
+  for (let p = 0; p < W * H; p++) {
+    if (!bright[p] || label[p]) continue;
+    n++;
+    let sp = 0, x0 = W, y0 = H, x1 = -1, y1 = -1, cnt = 0;
+    stack[sp++] = p; label[p] = n;
+    while (sp) {
+      const q = stack[--sp], x = q % W, y = (q / W) | 0;
+      cnt++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (x > 0 && bright[q - 1] && !label[q - 1]) { label[q - 1] = n; stack[sp++] = q - 1; }
+      if (x < W - 1 && bright[q + 1] && !label[q + 1]) { label[q + 1] = n; stack[sp++] = q + 1; }
+      if (y > 0 && bright[q - W] && !label[q - W]) { label[q - W] = n; stack[sp++] = q - W; }
+      if (y < H - 1 && bright[q + W] && !label[q + W]) { label[q + W] = n; stack[sp++] = q + W; }
+    }
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (w >= 40 && h >= 40 && Math.abs(w - h) <= Math.max(3, w * 0.06)) comps.push({ x0, y0, w, h, cnt });
+  }
+  // score each candidate against the monitor layout
+  let best = null;
+  for (const c of comps) {
+    const s = c.w / 46, t = c.h / 46;
+    let ringHit = 0, ringN = 0, cellHit = 0, cellN = 0;
+    for (let gy = 0; gy < 46; gy++) for (let gx = 0; gx < 46; gx++) {
+      const ch = MONITOR_ROWS[gy][gx];
+      if (ch === '.') continue;
+      const x = Math.floor(c.x0 + (gx + 0.5) * s), y = Math.floor(c.y0 + (gy + 0.5) * t);
+      const [r, g, b] = px(x, y);
+      if (ch === 'a') { ringN++; if (bright[y * W + x]) ringHit++; }
+      else {
+        // cell corners only (digits never reach there)
+        const m = (v) => (v - 1) % 12;
+        if ((m(gx) === 0 || m(gx) === 7) && (m(gy) === 0 || m(gy) === 7)) { cellN++; if (r < 60) cellHit++; }
+      }
+    }
+    const score = (ringHit / ringN) * (cellHit / cellN);
+    if (!best || score > best.score) best = { ...c, score, s, t };
+  }
+  if (!best || best.score < 0.6) return { error: 'Could not find the Schrödinger matrix in this image. Make sure the whole resolver GUI is visible and the screenshot is not heavily compressed.' };
+
+  const { x0, y0, s, t } = best;
+  const values = [], confidence = [];
+  for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+    const gx0 = 1 + 12 * i, gy0 = 1 + 12 * j;
+    const xs = Math.ceil(x0 + (gx0 + 0.4) * s), xe = Math.floor(x0 + (gx0 + 7.6) * s);
+    const ys = Math.ceil(y0 + (gy0 + 0.4) * t), ye = Math.floor(y0 + (gy0 + 7.6) * t);
+    const bs = [];
+    let total = 0;
+    for (let y = ys; y < ye; y++) for (let x = xs; x < xe; x++) {
+      total++;
+      const [r, g, b] = px(x, y);
+      if (r < 40 && Math.abs(g - b * 0.451) < 20) bs.push(b);
+    }
+    bs.sort((a, b) => a - b);
+    const med = bs.length ? bs[bs.length >> 1] : 0;
+    values.push(Math.max(0, Math.min(999, Math.round((med + 0.5) / 255 * 1000))));
+    confidence.push(total ? bs.length / total : 0);
+  }
+  // LEDs
+  const leds = [];
+  for (let k = 0; k < 9; k++) {
+    const gx = LED_POS[k % 3], gy = LED_POS[(k / 3) | 0];
+    let green = 0, red = 0, tot = 0;
+    for (let y = Math.ceil(y0 + gy * t); y < Math.floor(y0 + (gy + 4) * t); y++)
+      for (let x = Math.ceil(x0 + gx * s); x < Math.floor(x0 + (gx + 4) * s); x++) {
+        const [r, g, b] = px(x, y); tot++;
+        if (g > 150 && r < 80 && b < 90) green++;
+        else if (r > 180 && g < 110 && b < 60) red++;
+      }
+    leds.push(green > tot * 0.2 ? 'green' : red > tot * 0.2 ? 'red' : 'off');
+  }
+  let mode = 0;
+  const lit = leds.map((l, k) => (l !== 'off' ? k : -1)).filter(k => k >= 0).sort().join(',');
+  for (const m of [1, 2, 3, 4, 5]) if ([...MODE_LEDS[m]].sort().join(',') === lit) mode = m;
+  return { values, confidence, leds, mode, box: { x: x0, y: y0, w: best.w, h: best.h } };
+}
+
+// ---------- solver ----------
+
+// margin per pair accounts for reading error (~±5 per cell) and lets the solution survive
+function solve(values, mode, marginPerPair = 20) {
+  const cons = buildConstraints(mode);
+  const P = cons.map(c => c.pairs.flat());
+  const lim = cons.map(c => c.limit - marginPerPair * c.pairs.length);
+  // worst normalised slack: >0 means every LED is green with margin
+  const slack = (v) => {
+    let w = Infinity;
+    for (let k = 0; k < P.length; k++) {
+      const p = P[k];
+      let s = 0;
+      for (let i = 0; i < p.length; i += 2) s += Math.abs(v[p[i]] - v[p[i + 1]]);
+      const sl = (lim[k] - s) / cons[k].limit;
+      if (sl < w) w = sl;
+    }
+    return w;
+  };
+  const swaps = [];
+  for (let a = 0; a < 16; a++) for (let b = a + 1; b < 16; b++) swaps.push([a, b]);
+  const v = values.slice();
+  if (slack(v) > 0) return { steps: [], final: v, slack: slack(v), optimal: true };
+
+  // exhaustive search up to depth 3, keeping the most robust solution at the smallest depth
+  let best = null;
+  const path = [];
+  const dfs = (depth, start) => {
+    if (depth === 0) {
+      const sl = slack(v);
+      if (sl > 0 && (!best || sl > best.slack)) best = { steps: path.slice(), slack: sl };
+      return;
+    }
+    for (let k = start; k < swaps.length; k++) {
+      const [a, b] = swaps[k];
+      let t = v[a]; v[a] = v[b]; v[b] = t;
+      path.push(swaps[k]);
+      dfs(depth - 1, 0);
+      path.pop();
+      t = v[a]; v[a] = v[b]; v[b] = t;
+    }
+  };
+  for (let d = 1; d <= 3 && !best; d++) dfs(d, 0);
+  if (best) return finish(values, best.steps, best.slack, true);
+
+  // fallback: simulated annealing over target permutations, cost = swaps + violations
+  const cycles = (perm) => {
+    const seen = new Uint8Array(16); let c = 0;
+    for (let i = 0; i < 16; i++) if (!seen[i]) { c++; for (let j = i; !seen[j]; j = perm[j]) seen[j] = 1; }
+    return c;
+  };
+  let bestPerm = null, bestCost = Infinity;
+  for (let restart = 0; restart < 40; restart++) {
+    const perm = [...Array(16).keys()];
+    const arr = () => perm.map(i => values[i]);
+    const cost = () => { const sl = slack(arr()); return (16 - cycles(perm)) + (sl > 0 ? -sl : 50 * -sl + 10); };
+    let cur = cost(), T = 5;
+    for (let it = 0; it < 20000; it++, T *= 0.9996) {
+      const [a, b] = swaps[(Math.random() * swaps.length) | 0];
+      [perm[a], perm[b]] = [perm[b], perm[a]];
+      const nc = cost();
+      if (nc <= cur || Math.random() < Math.exp((cur - nc) / T)) {
+        cur = nc;
+        if (cur < bestCost && slack(arr()) > 0) { bestCost = cur; bestPerm = perm.slice(); }
+      } else[perm[a], perm[b]] = [perm[b], perm[a]];
+    }
+  }
+  if (!bestPerm) return { error: 'No arrangement balances every LED with a safety margin. Re-check the values.' };
+  // turn target permutation (position i receives values[perm[i]]) into swaps
+  const cur = [...Array(16).keys()]; // cur[pos] = original index sitting at pos
+  const where = [...Array(16).keys()];
+  const steps = [];
+  for (let i = 0; i < 16; i++) {
+    if (cur[i] === bestPerm[i]) continue;
+    const j = where[bestPerm[i]];
+    steps.push([i, j]);
+    [cur[i], cur[j]] = [cur[j], cur[i]];
+    where[cur[i]] = i; where[cur[j]] = j;
+  }
+  return finish(values, steps, null, false);
+
+  function finish(vals, steps, sl, optimal) {
+    const f = vals.slice();
+    for (const [a, b] of steps) [f[a], f[b]] = [f[b], f[a]];
+    return { steps, final: f, slack: sl ?? slack(f), optimal };
+  }
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { analyzeImage, solve, buildConstraints, evaluate, MODES, MODE_LEDS };
+
+</script>
+<script>
+const SAMPLE = [680, 190, 750, 520, 190, 470, 320, 480, 800, 230, 780, 470, 560, 640, 210, 800];
+const LED_XY = [11 / 46, 0.5, 35 / 46]; // LED centres as fraction of matrix
+const $ = (id) => document.getElementById(id);
+let values = SAMPLE.slice(), mode = 5, lowConf = new Array(16).fill(false);
+
+// build matrix inputs
+const inputs = [];
+for (let i = 0; i < 16; i++) {
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.min = 0; inp.max = 100; inp.id = 'cell' + i;
+  inp.setAttribute('aria-label', `Row ${(i >> 2) + 1}, column ${(i & 3) + 1}`);
+  inp.addEventListener('input', () => {
+    const n = Math.max(0, Math.min(100, Number(inp.value) || 0));
+    values[i] = Math.min(999, n * 10); lowConf[i] = false; render(false);
+  });
+  $('matrix').insertBefore(inp, $('leds'));
+  inputs.push(inp);
+}
+$('mode').addEventListener('change', () => { mode = Number($('mode').value); render(true); });
+
+function cellName(i) { return `row ${(i >> 2) + 1}, col ${(i & 3) + 1}`; }
+
+function render(syncInputs = true) {
+  $('mode').value = mode;
+  inputs.forEach((inp, i) => {
+    if (syncInputs || document.activeElement !== inp) inp.value = Math.round(values[i] / 10);
+    inp.style.setProperty('--a', Math.max(0.06, values[i] / 1000));
+    inp.classList.toggle('low', lowConf[i]);
+  });
+  const ev = evaluate(values, buildConstraints(mode));
+  const solved = ev.every(e => e.ok);
+  $('status').innerHTML = solved ? '<span class="ok">OK</span>' : '<span class="ng">NG</span>';
+  $('leds').innerHTML = ev.map(e => `<div class="led ${e.ok ? 'ok' : 'ng'}" style="left:${LED_XY[e.led % 3] * 100}%;top:${LED_XY[(e.led / 3) | 0] * 100}%"></div>`).join('');
+
+  const sol = solve(values, mode);
+  const ans = $('answer'), list = $('steps');
+  list.innerHTML = '';
+  if (sol.error) {
+    ans.innerHTML = `<div class="big">No safe solution</div><p>${sol.error}</p>`;
+    $('stepsTitle').textContent = 'Button presses';
+    return;
+  }
+  const n = sol.steps.length;
+  if (solved && n === 0) {
+    ans.innerHTML = `<div class="big">Already balanced</div><p>Every active LED is green with room to spare. Nothing to press.</p>`;
+  } else if (solved) {
+    ans.innerHTML = `<div class="big">Balanced, but close</div><p>All LEDs read green, but at least one is near its limit. ${n === 1 ? 'This swap adds' : 'These swaps add'} headroom.</p>`;
+  } else {
+    ans.innerHTML = `<div class="big">${n} swap${n === 1 ? '' : 's'} · ${n * 2} clicks</div><p>${sol.optimal ? 'Fewest possible swaps.' : 'Found by search; there may be a shorter route.'} Worst LED ends at ${Math.round((1 - sol.slack) * 100)}% of its limit.</p>`;
+  }
+  $('stepsTitle').textContent = n ? 'Button presses, in order' : 'Button presses';
+  const cur = values.slice();
+  sol.steps.forEach(([a, b], k) => {
+    const li = document.createElement('li');
+    li.className = 'step';
+    let gui = '';
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      if (c === 2 && r === 0) gui += '<div class="mid" aria-hidden="true"></div>';
+      const idx = r * 4 + c;
+      const cls = idx === a ? 'first' : idx === b ? 'second' : '';
+      gui += `<div class="btn ${cls}">${idx === a ? '1' : idx === b ? '2' : ''}</div>`;
+    }
+    li.innerHTML = `<h3>Swap ${k + 1}<span>${Math.round(cur[a] / 10)} ↔ ${Math.round(cur[b] / 10)}</span></h3>
+      <div class="gui" role="img" aria-label="Press button for ${cellName(a)}, then ${cellName(b)}">${gui}</div>
+      <p>Press <code>${cellName(a)}</code>, then <code>${cellName(b)}</code>.</p>`;
+    [cur[a], cur[b]] = [cur[b], cur[a]];
+    list.appendChild(li);
+  });
+  if (!n) list.innerHTML = '<li class="step"><p>No presses needed.</p></li>';
+}
+
+// ---------- image input ----------
+function setMsg(text, err) { $('msg').textContent = text; $('msg').classList.toggle('err', !!err); }
+
+function loadImage(file) {
+  if (!file || !file.type.startsWith('image/')) { setMsg('That file is not an image. Use a PNG or JPG screenshot.', true); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const cv = $('preview'), ctx = cv.getContext('2d', { willReadFrequently: true });
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    const data = ctx.getImageData(0, 0, cv.width, cv.height).data;
+    const r = analyzeImage(data, cv.width, cv.height);
+    cv.hidden = false; $('dropText').innerHTML = '<strong>Click, drop or paste</strong> to try another screenshot';
+    if (r.error) { setMsg(r.error + ' You can also type the values into the grid.', true); return; }
+    ctx.lineWidth = Math.max(2, r.box.w / 60); ctx.strokeStyle = '#f2c230';
+    ctx.strokeRect(r.box.x - ctx.lineWidth, r.box.y - ctx.lineWidth, r.box.w + 2 * ctx.lineWidth, r.box.h + 2 * ctx.lineWidth);
+    values = r.values; lowConf = r.confidence.map(c => c < 0.15);
+    const notes = [];
+    if (r.mode) mode = r.mode; else notes.push('Could not tell which LEDs are active. The LEDs can take a few seconds to appear after the GUI opens, so wait until they show up in game and take a new screenshot, or pick the LED layout by hand.');
+    if (lowConf.some(Boolean)) notes.push('Cells with a dashed outline were hard to read; check them against the game.');
+    setMsg(notes.length ? notes.join(' ') : 'Read all 16 cells and the LED layout. Check the numbers match the game, then follow the steps.', notes.length > 0);
+    render(true);
+  };
+  img.onerror = () => setMsg('Could not open that image.', true);
+  img.src = url;
+}
+const drop = $('drop');
+drop.addEventListener('click', () => $('file').click());
+drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
+$('file').addEventListener('change', (e) => loadImage(e.target.files[0]));
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); loadImage(e.dataTransfer.files[0]); });
+document.addEventListener('paste', (e) => {
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (item) loadImage(item.getAsFile());
+});
+
+render(true);
+</script>
